@@ -19,6 +19,7 @@ import ProtectedRoute from './components/ProtectedRoute'
 import DoctorSchedule from './pages/DoctorSchedule'
 import VideoCall from './components/VideoCall'
 import DoctorAppointments from './pages/DoctorAppointments'
+import Contact from "./pages/contact";
 
 const App = () => {
   const { user } = useAuth();
