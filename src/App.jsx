@@ -7,7 +7,7 @@ import About from './pages/About'
 import MyProfile from './pages/MyProfile'
 import MyAppointment from './pages/MyAppointment'
 import Appointment from './pages/Appointment'
-import Contact from './pages/contact'
+import Contact from './pages/Contact'
 import Navbar from './components/Navbar'
 import Footer from './components/Footer'
 import { useAuth } from './context/AuthContext'
@@ -19,7 +19,6 @@ import ProtectedRoute from './components/ProtectedRoute'
 import DoctorSchedule from './pages/DoctorSchedule'
 import VideoCall from './components/VideoCall'
 import DoctorAppointments from './pages/DoctorAppointments'
-import Contact from "./pages/contact";
 
 const App = () => {
   const { user } = useAuth();
