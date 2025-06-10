@@ -1,133 +1,24 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { useReactToPrint } from 'react-to-print';
-
-const PrintableReport = React.forwardRef(({ result, user, previewUrl, formatDate, formatProbability, getHighestProbabilityClass }, ref) => {
-  if (!result || !user) return null;
-  
-  return (
-    <div ref={ref} className="print-content p-8 bg-white">
-      {/* Report Header */}
-      <div className="text-center mb-8">
-        <h2 className="text-2xl font-bold text-gray-900">Brain Tumor Detection Report</h2>
-        <p className="text-gray-600 mt-2">Generated on {formatDate(new Date())}</p>
-      </div>
-
-      {/* Patient Information */}
-      <div className="mb-8">
-        <h3 className="text-xl font-semibold mb-4 border-b pb-2">Patient Information</h3>
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <p className="text-gray-600">Name: {user?.firstName} {user?.lastName}</p>
-            <p className="text-gray-600">Email: {user?.email}</p>
-            <p className="text-gray-600">ID: {user?.id}</p>
-          </div>
-          {user?.photoURL && (
-            <div className="flex justify-end">
-              <img 
-                src={user.photoURL} 
-                alt="Patient" 
-                className="w-24 h-24 rounded-full object-cover"
-              />
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* MRI Scan Image */}
-      <div className="mb-8">
-        <h3 className="text-xl font-semibold mb-4 border-b pb-2">MRI Scan</h3>
-        <div className="flex justify-center">
-          <img
-            src={previewUrl}
-            alt="MRI Scan"
-            className="max-h-64 object-contain"
-          />
-        </div>
-      </div>
-
-      {/* Analysis Results */}
-      <div className="mb-8">
-        <h3 className="text-xl font-semibold mb-4 border-b pb-2">Analysis Results</h3>
-        <div className="space-y-4">
-          <div className="mb-4">
-            <p className="text-lg font-medium">
-              Primary Detection: {' '}
-              <span className={
-                getHighestProbabilityClass(result) === 'No Tumor'
-                  ? 'text-green-600'
-                  : 'text-red-600'
-              }>
-                {getHighestProbabilityClass(result)}
-              </span>
-            </p>
-          </div>
-          
-          <div className="space-y-3">
-            {Object.entries(result).map(([type, probability]) => (
-              <div key={type}>
-                <div className="flex justify-between mb-1">
-                  <span className="font-medium">{type}:</span>
-                  <span>{formatProbability(probability)}</span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div
-                    className="bg-indigo-600 h-2 rounded-full"
-                    style={{ width: `${probability * 100}%` }}
-                  ></div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Recommendations */}
-      {getHighestProbabilityClass(result) !== 'No Tumor' && (
-        <div>
-          <h3 className="text-xl font-semibold mb-4 border-b pb-2">Recommendations</h3>
-          <ul className="list-disc list-inside space-y-2">
-            <li>Schedule an immediate consultation with a specialist</li>
-            <li>Bring your MRI scans and AI analysis results to your appointment</li>
-            <li>Consider getting a second opinion from another specialist</li>
-          </ul>
-        </div>
-      )}
-
-      {/* Footer */}
-      <div className="mt-8 pt-4 border-t text-sm text-gray-500">
-        <p>This report was generated automatically by the AI Brain Tumor Detection System.</p>
-        <p>Please consult with a healthcare professional for proper medical diagnosis.</p>
-      </div>
-    </div>
-  );
-});
 
 const AiTool = () => {
   const [selectedImage, setSelectedImage] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [printError, setPrintError] = useState(null);
   const { user } = useAuth();
-  const reportRef = useRef(null);
 
-  const formatDate = (date) => {
-    try {
-      return new Date(date).toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-      });
-    } catch (error) {
-      console.error('Date formatting error:', error);
-      return 'Date not available';
-    }
-  };
+  // Handle component mounting
+  useEffect(() => {
+    return () => {
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+      }
+    };
+  }, [previewUrl]);
 
   const formatProbability = (value) => {
+    if (typeof value !== 'number') return 'N/A';
     try {
       return (value * 100).toFixed(2) + '%';
     } catch (error) {
@@ -136,93 +27,17 @@ const AiTool = () => {
     }
   };
 
-  const getHighestProbabilityClass = (results) => {
+  const getHighestProbabilityClass = useCallback((results) => {
+    if (!results || typeof results !== 'object') return 'N/A';
     try {
-      if (!results || typeof results !== 'object') return 'N/A';
-      return Object.entries(results).reduce((a, b) => (a[1] > b[1] ? a : b), ['N/A', 0])[0];
+      const entries = Object.entries(results);
+      if (entries.length === 0) return 'N/A';
+      return entries.reduce((a, b) => (a[1] > b[1] ? a : b), ['N/A', 0])[0];
     } catch (error) {
       console.error('Error getting highest probability:', error);
       return 'N/A';
     }
-  };
-
-  React.useEffect(() => {
-    const style = document.createElement('style');
-    style.textContent = `
-      @media print {
-        body * {
-          visibility: hidden;
-        }
-        .print-content,
-        .print-content * {
-          visibility: visible !important;
-          -webkit-print-color-adjust: exact !important;
-          print-color-adjust: exact !important;
-        }
-        .print-content {
-          position: absolute;
-          left: 0;
-          top: 0;
-          width: 100%;
-          height: 100%;
-          padding: 20px;
-          box-sizing: border-box;
-        }
-        @page {
-          size: auto;
-          margin: 20mm;
-        }
-      }
-    `;
-    document.head.appendChild(style);
-    return () => {
-      if (style.parentNode) {
-        document.head.removeChild(style);
-      }
-    };
   }, []);
-
-  const handlePrintAction = useCallback(() => {
-    if (!result || !user) {
-      setPrintError('Cannot print: Missing required data');
-      return;
-    }
-
-    if (!reportRef.current) {
-      setPrintError('Print component not ready. Please try again.');
-      return;
-    }
-
-    try {
-      console.log('Starting print process...');
-      console.log('Print content:', reportRef.current);
-      handlePrint();
-    } catch (error) {
-      console.error('Print error:', error);
-      setPrintError('Failed to print. Please try again.');
-    }
-  }, [result, user, handlePrint]);
-
-  const handlePrint = useReactToPrint({
-    content: () => reportRef.current,
-    onBeforeGetContent: () => {
-      setPrintError(null);
-      console.log('Preparing to print...');
-      return new Promise((resolve) => {
-        console.log('Print preparation complete');
-        resolve();
-      });
-    },
-    onPrintError: (error) => {
-      console.error('Print failed:', error);
-      setPrintError('Failed to print. Please try again.');
-    },
-    onAfterPrint: () => {
-      console.log('Print completed or cancelled');
-      setPrintError(null);
-    },
-    removeAfterPrint: true
-  });
 
   const handleImageChange = (e) => {
     const file = e.target.files[0];
@@ -254,25 +69,51 @@ const AiTool = () => {
     if (!selectedImage) return;
 
     setLoading(true);
-    setPrintError(null);
     try {
       const formData = new FormData();
       formData.append('file', selectedImage);
 
-      const response = await fetch('https://samxrashed-braintumorclassification.hf.space/predict', {
-        method: 'POST',
-        body: formData,
-      });
+      // First try the primary endpoint
+      let response;
+      try {
+        response = await fetch('https://samxrashed-braintumorclassification.hf.space/predict', {
+          method: 'POST',
+          body: formData,
+        });
+      } catch (primaryError) {
+        console.log('Primary endpoint failed, trying backup endpoint...');
+        // If primary fails, try the backup endpoint
+        response = await fetch('https://brain-tumor-detection-api.onrender.com/predict', {
+          method: 'POST',
+          body: formData,
+        });
+      }
 
       if (!response.ok) {
-        throw new Error('Failed to analyze image');
+        throw new Error(`API Error: ${response.status} ${response.statusText}`);
       }
 
       const data = await response.json();
-      setResult(data);
+      
+      // Validate the response data
+      if (!data || typeof data !== 'object') {
+        throw new Error('Invalid response format from API');
+      }
+
+      // Transform the data if needed
+      const processedData = {
+        'No Tumor': data['No Tumor'] || 0,
+        'Glioma': data['Glioma'] || 0,
+        'Meningioma': data['Meningioma'] || 0,
+        'Pituitary': data['Pituitary'] || 0
+      };
+
+      setResult(processedData);
     } catch (error) {
       console.error('Error analyzing image:', error);
-      setResult({ error: 'Failed to analyze image. Please try again.' });
+      setResult({ 
+        error: 'Failed to analyze image. Please try again later. Error: ' + error.message 
+      });
     } finally {
       setLoading(false);
     }
@@ -397,103 +238,77 @@ const AiTool = () => {
 
           {/* Results Section */}
           {result && !result.error && (
-            <>
-              {/* Printable Report */}
-              <div style={{ display: 'none' }} className="print-content">
-                <PrintableReport
-                  ref={reportRef}
-                  result={result}
-                  user={user}
-                  previewUrl={previewUrl}
-                  formatDate={formatDate}
-                  formatProbability={formatProbability}
-                  getHighestProbabilityClass={getHighestProbabilityClass}
-                />
+            <div className="mt-8 p-8 bg-gradient-to-br from-white to-blue-50 rounded-2xl shadow-lg transition-all duration-300">
+              <div className="flex justify-between items-center mb-6 pb-2 border-b border-gray-200">
+                <h3 className="text-xl font-semibold text-gray-900">Analysis Results</h3>
               </div>
 
-              {/* Visible Results */}
-              <div className="mt-8 p-8 bg-gradient-to-br from-white to-blue-50 rounded-2xl shadow-lg transition-all duration-300">
-                <div className="flex justify-between items-center mb-6 pb-2 border-b border-gray-200">
-                  <h3 className="text-xl font-semibold text-gray-900">Analysis Results</h3>
-                  <button
-                    onClick={handlePrintAction}
-                    className="flex items-center px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
-                    disabled={loading || !result || !user}
-                  >
-                    <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-                    </svg>
-                    Print Report
-                  </button>
+              <div className="space-y-6">
+                <div className="bg-white p-6 rounded-xl shadow-sm">
+                  <h4 className="text-lg font-semibold text-gray-900 mb-4">
+                    Detection Result: {' '}
+                    <span className={`${
+                      getHighestProbabilityClass(result) === 'No Tumor' 
+                        ? 'text-green-600' 
+                        : 'text-red-600'
+                    }`}>
+                      {getHighestProbabilityClass(result)}
+                    </span>
+                  </h4>
+                  
+                  <div className="space-y-3">
+                    {Object.entries(result).map(([type, probability]) => (
+                      <div key={type} className="relative">
+                        <div className="flex justify-between mb-1">
+                          <span className="text-sm font-medium text-gray-700">{type}</span>
+                          <span className="text-sm font-medium text-gray-700">
+                            {formatProbability(probability)}
+                          </span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2.5">
+                          <div
+                            className="bg-indigo-600 h-2.5 rounded-full transition-all duration-500"
+                            style={{ width: `${probability * 100}%` }}
+                          ></div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
 
-                {printError && (
-                  <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-lg">
-                    {printError}
+                {getHighestProbabilityClass(result) !== 'No Tumor' && (
+                  <div className="bg-white p-6 rounded-xl shadow-sm">
+                    <p className="font-semibold text-gray-900 mb-4">Recommendations</p>
+                    <ul className="space-y-3">
+                      <li className="flex items-center text-gray-700">
+                        <svg className="w-5 h-5 text-indigo-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        Schedule an immediate consultation with a specialist
+                      </li>
+                      <li className="flex items-center text-gray-700">
+                        <svg className="w-5 h-5 text-indigo-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        Bring your MRI scans and AI analysis results to your appointment
+                      </li>
+                      <li className="flex items-center text-gray-700">
+                        <svg className="w-5 h-5 text-indigo-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        Consider getting a second opinion from another specialist
+                      </li>
+                    </ul>
                   </div>
                 )}
-
-                <div className="space-y-6">
-                  <div className="bg-white p-6 rounded-xl shadow-sm">
-                    <h4 className="text-lg font-semibold text-gray-900 mb-4">
-                      Detection Result: {' '}
-                      <span className={`${
-                        getHighestProbabilityClass(result) === 'No Tumor' 
-                          ? 'text-green-600' 
-                          : 'text-red-600'
-                      }`}>
-                        {getHighestProbabilityClass(result)}
-                      </span>
-                    </h4>
-                    
-                    <div className="space-y-3">
-                      {Object.entries(result).map(([type, probability]) => (
-                        <div key={type} className="relative">
-                          <div className="flex justify-between mb-1">
-                            <span className="text-sm font-medium text-gray-700">{type}</span>
-                            <span className="text-sm font-medium text-gray-700">
-                              {formatProbability(probability)}
-                            </span>
-                          </div>
-                          <div className="w-full bg-gray-200 rounded-full h-2.5">
-                            <div
-                              className="bg-indigo-600 h-2.5 rounded-full transition-all duration-500"
-                              style={{ width: `${probability * 100}%` }}
-                            ></div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {getHighestProbabilityClass(result) !== 'No Tumor' && (
-                    <div className="bg-white p-6 rounded-xl shadow-sm">
-                      <p className="font-semibold text-gray-900 mb-4">Recommendations</p>
-                      <ul className="space-y-3">
-                        <li className="flex items-center text-gray-700">
-                          <svg className="w-5 h-5 text-indigo-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                          Schedule an immediate consultation with a specialist
-                        </li>
-                        <li className="flex items-center text-gray-700">
-                          <svg className="w-5 h-5 text-indigo-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                          Bring your MRI scans and AI analysis results to your appointment
-                        </li>
-                        <li className="flex items-center text-gray-700">
-                          <svg className="w-5 h-5 text-indigo-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                          Consider getting a second opinion from another specialist
-                        </li>
-                      </ul>
-                    </div>
-                  )}
-                </div>
               </div>
-            </>
+            </div>
+          )}
+
+          {result && result.error && (
+            <div className="mt-8 p-4 bg-red-50 rounded-xl text-red-600">
+              {result.error}
+            </div>
           )}
         </div>
       </div>
