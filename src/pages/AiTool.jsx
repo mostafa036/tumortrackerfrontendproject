@@ -156,12 +156,21 @@ const AiTool = () => {
         .print-content,
         .print-content * {
           visibility: visible !important;
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
         }
         .print-content {
-          position: fixed;
+          position: absolute;
           left: 0;
           top: 0;
           width: 100%;
+          height: 100%;
+          padding: 20px;
+          box-sizing: border-box;
+        }
+        @page {
+          size: auto;
+          margin: 20mm;
         }
       }
     `;
@@ -179,29 +188,39 @@ const AiTool = () => {
       return;
     }
 
+    if (!reportRef.current) {
+      setPrintError('Print component not ready. Please try again.');
+      return;
+    }
+
     try {
+      console.log('Starting print process...');
+      console.log('Print content:', reportRef.current);
       handlePrint();
     } catch (error) {
       console.error('Print error:', error);
       setPrintError('Failed to print. Please try again.');
     }
-  }, [result, user]);
+  }, [result, user, handlePrint]);
 
   const handlePrint = useReactToPrint({
-    content: useCallback(() => reportRef.current, []),
-    onBeforeGetContent: useCallback(() => {
+    content: () => reportRef.current,
+    onBeforeGetContent: () => {
       setPrintError(null);
       console.log('Preparing to print...');
-      return Promise.resolve();
-    }, []),
-    onPrintError: useCallback((error) => {
+      return new Promise((resolve) => {
+        console.log('Print preparation complete');
+        resolve();
+      });
+    },
+    onPrintError: (error) => {
       console.error('Print failed:', error);
       setPrintError('Failed to print. Please try again.');
-    }, []),
-    onAfterPrint: useCallback(() => {
+    },
+    onAfterPrint: () => {
       console.log('Print completed or cancelled');
       setPrintError(null);
-    }, []),
+    },
     removeAfterPrint: true
   });
 
@@ -380,7 +399,7 @@ const AiTool = () => {
           {result && !result.error && (
             <>
               {/* Printable Report */}
-              <div style={{ display: 'none' }}>
+              <div style={{ display: 'none' }} className="print-content">
                 <PrintableReport
                   ref={reportRef}
                   result={result}

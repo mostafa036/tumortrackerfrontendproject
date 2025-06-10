@@ -36,28 +36,47 @@ const Register = () => {
 
   const validateForm = () => {
     const newErrors = {};
+
+    // Required field validations
     if (!formData.userName.trim()) newErrors.userName = 'Username is required';
     if (!formData.firstName.trim()) newErrors.firstName = 'First name is required';
     if (!formData.lastName.trim()) newErrors.lastName = 'Last name is required';
+    if (!formData.type.trim()) newErrors.type = 'Type is required';
+    
+    // Email validation
     if (!formData.email.trim()) {
       newErrors.email = 'Email is required';
     } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
       newErrors.email = 'Email is invalid';
     }
+
+    // Password validation
+    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
     if (!formData.password) {
       newErrors.password = 'Password is required';
+    } else if (!passwordRegex.test(formData.password)) {
+      newErrors.password = "Password must contain at least one uppercase letter, one lowercase letter, one number, and be at least 8 characters long";
     }
+
+    // Confirm password validation
     if (formData.password !== formData.confirmPassword) {
-      newErrors.confirmPassword = 'Passwords do not match';
+      newErrors.confirmPassword = "Passwords do not match";
     }
-    if (!formData.age) newErrors.age = 'Age is required';
-    if (!formData.type) newErrors.type = 'Type is required';
-    
+
+    // Age validation
+    if (!formData.age) {
+      newErrors.age = 'Age is required';
+    } else if (formData.age < 0 || formData.age > 120) {
+      newErrors.age = "Please enter a valid age";
+    }
+
+    // Doctor-specific validation
     if (formData.userType === 'doctor' && !formData.departmentId) {
       newErrors.departmentId = 'Department is required';
     }
 
-    return newErrors;
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
   };
 
   const handleSubmit = async (e) => {
@@ -222,6 +241,9 @@ const Register = () => {
                 value={formData.password}
                 onChange={handleChange}
               />
+              <p className="mt-1 text-xs text-gray-500">
+                Password must contain at least one uppercase letter (A-Z), one lowercase letter (a-z), one number, and be at least 8 characters long.
+              </p>
               {errors.password && (
                 <p className="mt-1 text-sm text-red-500">{errors.password}</p>
               )}

@@ -43,6 +43,14 @@ const Navbar = () => {
               <div className="absolute bottom-0 left-0 w-full h-0.5 bg-indigo-600 scale-x-0 group-hover:scale-x-100 transition-transform" />
             </Link>
 
+            <Link 
+              to="/for-you"
+              className="py-1 relative group text-gray-700 hover:text-indigo-600"
+            >
+              <li>For You</li>
+              <div className="absolute bottom-0 left-0 w-full h-0.5 bg-indigo-600 scale-x-0 group-hover:scale-x-100 transition-transform" />
+            </Link>
+
             {user.role === 'Patient' ? (
               <>
                 <Link 

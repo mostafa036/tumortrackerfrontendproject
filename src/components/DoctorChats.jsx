@@ -2,15 +2,17 @@ import { useState, useEffect, useCallback } from 'react';
 import { jwtDecode } from 'jwt-decode';
 import Chat from './Chat';
 import { signalRService } from '../services/signalRService';
+import { useAuth } from '../context/AuthContext';
 
 const DoctorChats = ({ onClose }) => {
   const [patients, setPatients] = useState([]);
   const [selectedPatient, setSelectedPatient] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const { user } = useAuth();
   const token = localStorage.getItem('token');
   const decodedToken = token ? jwtDecode(token) : null;
-  const doctorId = decodedToken?.Id;
+  const doctorId = user?.id || decodedToken?.['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier'];
 
   const formatTime = (dateString) => {
     const date = new Date(dateString);
@@ -28,6 +30,7 @@ const DoctorChats = ({ onClose }) => {
 
   const fetchWithAuth = async (url, options = {}) => {
     try {
+      console.log('Making API request to:', url);
       const response = await fetch(url, {
         ...options,
         headers: {
@@ -38,15 +41,20 @@ const DoctorChats = ({ onClose }) => {
         }
       });
 
+      console.log('API Response status:', response.status);
+
       if (!response.ok) {
         if (response.status === 401) {
           throw new Error('Unauthorized. Please log in again.');
         }
         const errorData = await response.json().catch(() => null);
+        console.error('API Error Data:', errorData);
         throw new Error(errorData?.message || `Error: ${response.status}`);
       }
 
-      return await response.json();
+      const data = await response.json();
+      console.log('API Response data:', data);
+      return data;
     } catch (error) {
       console.error('API Error:', error);
       throw error;
@@ -57,15 +65,47 @@ const DoctorChats = ({ onClose }) => {
     try {
       setError(null);
       
-      // Get contact users
-      const users = await fetchWithAuth('https://tumortraker12.runasp.net/api/Chat/GetContactUsers');
+      if (!token) {
+        throw new Error('No authentication token found');
+      }
+
+      if (!doctorId) {
+        throw new Error('Doctor ID not found');
+      }
+
+      console.log('Loading patients for doctor:', doctorId);
+      console.log('Using token:', token);
       
+      // Get contact users
+      const users = await fetchWithAuth('/api/Chat/GetContactUsers', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        }
+      });
+      
+      if (!Array.isArray(users)) {
+        console.error('Invalid users data format:', users);
+        throw new Error('Invalid users data received');
+      }
+
       // Get chat history for each patient
       const patientsWithMessages = await Promise.all(
         users.map(async (patient) => {
           try {
+            console.log('Loading chat history for patient:', patient.id);
             const messages = await fetchWithAuth(
-              `https://tumortraker12.runasp.net/api/Chat/GetChat?receiverId=${patient.id}`
+              `/api/Chat/GetChat?receiverId=${patient.id}`,
+              {
+                method: 'GET',
+                headers: {
+                  'Authorization': `Bearer ${token}`,
+                  'Content-Type': 'application/json',
+                  'Accept': 'application/json'
+                }
+              }
             );
             
             const lastMessage = messages[messages.length - 1];
@@ -106,13 +146,14 @@ const DoctorChats = ({ onClose }) => {
         return dateB - dateA;
       });
 
+      console.log('Loaded patients:', sortedPatients);
       setPatients(sortedPatients);
     } catch (error) {
       console.error('Error loading patients:', error);
       if (error.message.includes('Unauthorized')) {
         setError('Session expired. Please log in again.');
       } else {
-        setError('Failed to load messages. Please try again in a moment.');
+        setError(`Failed to load messages: ${error.message}`);
       }
     } finally {
       setLoading(false);
@@ -120,6 +161,7 @@ const DoctorChats = ({ onClose }) => {
   }, [token, doctorId]);
 
   const handleNewMessage = useCallback((senderId, message) => {
+    console.log('New message received:', { senderId, message });
     setPatients(prevPatients => {
       const updatedPatients = prevPatients.map(patient => {
         if (patient.id === senderId) {
@@ -154,24 +196,20 @@ const DoctorChats = ({ onClose }) => {
       while (retryCount < maxRetries && mounted) {
         try {
           await loadPatients();
+          
+          // Connect to SignalR
+          const connected = await signalRService.start();
+          if (!connected) {
+            throw new Error('Failed to connect to chat service');
+          }
+          
           break;
         } catch (error) {
+          console.error(`Attempt ${retryCount + 1} failed:`, error);
           retryCount++;
           if (retryCount < maxRetries) {
             await new Promise(resolve => setTimeout(resolve, 2000 * retryCount));
           }
-        }
-      }
-
-      if (mounted) {
-        // Connect to SignalR
-        const connected = await signalRService.startConnection();
-        if (connected) {
-          const removeListener = signalRService.addMessageListener(handleNewMessage);
-          return () => {
-            removeListener();
-            signalRService.stopConnection();
-          };
         }
       }
     };
@@ -180,8 +218,9 @@ const DoctorChats = ({ onClose }) => {
 
     return () => {
       mounted = false;
+      signalRService.stop();
     };
-  }, [loadPatients, handleNewMessage]);
+  }, [loadPatients]);
 
   if (loading) {
     return (
@@ -224,6 +263,7 @@ const DoctorChats = ({ onClose }) => {
   }
 
   if (selectedPatient) {
+    console.log('Selected patient:', selectedPatient);
     return (
       <Chat
         doctorId={doctorId}
@@ -266,7 +306,10 @@ const DoctorChats = ({ onClose }) => {
               {patients.map((patient) => (
                 <div
                   key={patient.id}
-                  onClick={() => setSelectedPatient(patient)}
+                  onClick={() => {
+                    console.log('Selecting patient:', patient);
+                    setSelectedPatient(patient);
+                  }}
                   className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors border border-gray-100"
                 >
                   <div className="w-12 h-12 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0">

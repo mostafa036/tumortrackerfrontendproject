@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { signalRService } from '../services/signalRService';
+import { useAuth } from '../context/AuthContext';
 
 const Chat = ({ doctorId, patientId, patientName, onClose, onMessageSent }) => {
   const [messages, setMessages] = useState([]);
@@ -9,6 +10,32 @@ const Chat = ({ doctorId, patientId, patientName, onClose, onMessageSent }) => {
   const [sending, setSending] = useState(false);
   const messagesEndRef = useRef(null);
   const token = localStorage.getItem('token');
+  const { user } = useAuth();
+  const isDoctor = user?.role === 'Doctor';
+
+  // Validate required props
+  useEffect(() => {
+    if (!doctorId) {
+      console.error('Chat: doctorId is required');
+      setError('Doctor ID is missing');
+      setLoading(false);
+      return;
+    }
+
+    if (!patientId) {
+      console.error('Chat: patientId is required');
+      setError('Patient ID is missing');
+      setLoading(false);
+      return;
+    }
+
+    if (!token) {
+      console.error('Chat: No authentication token found');
+      setError('Please log in again');
+      setLoading(false);
+      return;
+    }
+  }, [doctorId, patientId, token]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -16,6 +43,7 @@ const Chat = ({ doctorId, patientId, patientName, onClose, onMessageSent }) => {
 
   const fetchWithAuth = async (url, options = {}) => {
     try {
+      console.log('Making API request to:', url);
       const response = await fetch(url, {
         ...options,
         headers: {
@@ -26,15 +54,21 @@ const Chat = ({ doctorId, patientId, patientName, onClose, onMessageSent }) => {
         }
       });
 
+      console.log('API Response status:', response.status);
+
       if (!response.ok) {
         if (response.status === 401) {
+          console.error('Unauthorized access. Token may be invalid.');
           throw new Error('Unauthorized. Please log in again.');
         }
         const errorData = await response.json().catch(() => null);
+        console.error('API Error Data:', errorData);
         throw new Error(errorData?.message || `Error: ${response.status}`);
       }
 
-      return options.method === 'DELETE' ? null : await response.json();
+      const data = await response.json();
+      console.log('API Response data:', data);
+      return data;
     } catch (error) {
       console.error('API Error:', error);
       throw error;
@@ -46,10 +80,27 @@ const Chat = ({ doctorId, patientId, patientName, onClose, onMessageSent }) => {
       setLoading(true);
       setError(null);
       
+      if (!token) {
+        throw new Error('No authentication token found');
+      }
+
+      if (!patientId || !doctorId) {
+        throw new Error('Missing required IDs');
+      }
+
+      console.log('Loading messages for chat between:', { doctorId, patientId });
+      
+      // Get chat messages using the appropriate ID based on role
+      const receiverId = isDoctor ? patientId : doctorId;
       const data = await fetchWithAuth(
-        `https://tumortraker12.runasp.net/api/Chat/GetChat?receiverId=${patientId}`
+        `https://tumortraker12.runasp.net/api/Chat/GetChat?receiverId=${receiverId}`
       );
       
+      if (!Array.isArray(data)) {
+        console.error('Invalid message data format:', data);
+        throw new Error('Invalid message data received');
+      }
+
       // Transform messages to match the API schema
       const formattedMessages = data.map(msg => ({
         id: msg.id,
@@ -79,16 +130,30 @@ const Chat = ({ doctorId, patientId, patientName, onClose, onMessageSent }) => {
     let mounted = true;
     let retryCount = 0;
     const maxRetries = 3;
+    const retryDelay = 2000; // 2 seconds
 
     const initialize = async () => {
+      // Skip if required props are missing
+      if (!doctorId || !patientId || !token) {
+        return;
+      }
+
       while (retryCount < maxRetries && mounted) {
         try {
           await loadMessages();
+          
+          // Connect to SignalR
+          const connected = await signalRService.start();
+          if (!connected) {
+            throw new Error('Failed to connect to chat service');
+          }
+          
           break;
         } catch (error) {
+          console.error(`Attempt ${retryCount + 1} failed:`, error);
           retryCount++;
-          if (retryCount < maxRetries) {
-            await new Promise(resolve => setTimeout(resolve, 2000 * retryCount));
+          if (retryCount < maxRetries && mounted) {
+            await new Promise(resolve => setTimeout(resolve, retryDelay * retryCount));
           }
         }
       }
@@ -98,11 +163,13 @@ const Chat = ({ doctorId, patientId, patientName, onClose, onMessageSent }) => {
 
     // Listen for new messages
     const removeListener = signalRService.addMessageListener((senderId, message) => {
-      if (senderId === patientId && mounted) {
+      const expectedSenderId = isDoctor ? patientId : doctorId;
+      if (senderId === expectedSenderId && mounted) {
+        console.log('New message received:', { senderId, message });
         setMessages(prev => [...prev, {
           id: Date.now(), // Temporary ID until refresh
           senderId,
-          receiverId: doctorId,
+          receiverId: isDoctor ? doctorId : patientId,
           message,
           timestamp: new Date().toISOString()
         }]);
@@ -113,8 +180,9 @@ const Chat = ({ doctorId, patientId, patientName, onClose, onMessageSent }) => {
     return () => {
       mounted = false;
       removeListener();
+      signalRService.stop();
     };
-  }, [patientId, doctorId, token]);
+  }, [patientId, doctorId, token, isDoctor]);
 
   const sendMessage = async (e) => {
     e.preventDefault();
@@ -122,19 +190,14 @@ const Chat = ({ doctorId, patientId, patientName, onClose, onMessageSent }) => {
 
     try {
       setSending(true);
-      await fetchWithAuth('https://tumortraker12.runasp.net/api/Chat/send', {
-        method: 'POST',
-        body: JSON.stringify({
-          receiverId: patientId,
-          message: newMessage.trim()
-        })
-      });
+      const receiverId = isDoctor ? patientId : doctorId;
+      await signalRService.sendMessage(receiverId, newMessage.trim());
 
       // Add message to local state
       setMessages(prev => [...prev, {
         id: Date.now(), // Temporary ID until refresh
-        senderId: doctorId,
-        receiverId: patientId,
+        senderId: isDoctor ? doctorId : patientId,
+        receiverId,
         message: newMessage.trim(),
         timestamp: new Date().toISOString()
       }]);
@@ -156,7 +219,7 @@ const Chat = ({ doctorId, patientId, patientName, onClose, onMessageSent }) => {
 
   const deleteMessage = async (messageId) => {
     try {
-      await fetchWithAuth(`https://tumortraker12.runasp.net/api/Chat?MessageId=${messageId}`, {
+      await fetchWithAuth(`/api/Chat?MessageId=${messageId}`, {
         method: 'DELETE'
       });
 
@@ -174,106 +237,114 @@ const Chat = ({ doctorId, patientId, patientName, onClose, onMessageSent }) => {
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl h-[80vh] flex flex-col">
-        {/* Chat Header */}
-        <div className="p-4 border-b flex items-center justify-between bg-indigo-600 rounded-t-lg">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center">
-              <span className="text-indigo-600 font-semibold text-lg">
-                {patientName[0]}
-              </span>
-            </div>
-            <h2 className="text-lg font-semibold text-white">{patientName}</h2>
+    <div className="h-full flex flex-col bg-white shadow-xl rounded-lg overflow-hidden">
+      {/* Chat Header */}
+      <div className="p-3 border-b flex items-center justify-between bg-indigo-600">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center">
+            <span className="text-indigo-600 font-semibold text-base">
+              {isDoctor ? (patientName ? patientName[0] : 'P') : 'D'}
+            </span>
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-indigo-700 rounded-full transition-colors"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+          <h2 className="text-base font-semibold text-white">
+            {isDoctor ? patientName : 'Doctor'}
+          </h2>
         </div>
+        <button
+          onClick={onClose}
+          className="p-1.5 hover:bg-indigo-700 rounded-full transition-colors"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
 
-        {/* Chat Messages */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {loading ? (
-            <div className="flex justify-center items-center h-full">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
-            </div>
-          ) : error ? (
-            <div className="text-center text-red-500 py-4">
-              {error}
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto p-3 space-y-3">
+        {loading ? (
+          <div className="flex items-center justify-center h-full">
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-indigo-600"></div>
+          </div>
+        ) : error ? (
+          <div className="flex items-center justify-center h-full">
+            <div className="text-red-500 text-center text-sm">
+              <p>{error}</p>
               <button
                 onClick={loadMessages}
-                className="block mx-auto mt-2 text-indigo-600 hover:text-indigo-700"
+                className="mt-2 text-indigo-600 hover:text-indigo-700 text-sm"
               >
                 Try Again
               </button>
             </div>
-          ) : messages.length === 0 ? (
-            <div className="text-center text-gray-500 py-4">
-              No messages yet. Start the conversation!
-            </div>
-          ) : (
-            messages.map((message) => (
-              <div
-                key={message.id}
-                className={`flex ${message.senderId === doctorId ? 'justify-end' : 'justify-start'}`}
-              >
-                <div
-                  className={`max-w-[70%] rounded-lg p-3 relative group ${
-                    message.senderId === doctorId
-                      ? 'bg-indigo-600 text-white'
-                      : 'bg-gray-100 text-gray-800'
-                  }`}
-                >
-                  <p className="break-words">{message.message}</p>
-                  <p className={`text-xs mt-1 ${
-                    message.senderId === doctorId
-                      ? 'text-indigo-200'
-                      : 'text-gray-500'
-                  }`}>
-                    {formatTime(message.timestamp)}
-                  </p>
-                  {message.senderId === doctorId && (
-                    <button
-                      onClick={() => deleteMessage(message.id)}
-                      className="absolute -right-6 top-0 p-1 text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))
-          )}
-          <div ref={messagesEndRef} />
-        </div>
-
-        {/* Message Input */}
-        <form onSubmit={sendMessage} className="p-4 border-t">
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={newMessage}
-              onChange={(e) => setNewMessage(e.target.value)}
-              placeholder="Type a message..."
-              className="flex-1 border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            />
-            <button
-              type="submit"
-              disabled={!newMessage.trim() || sending}
-              className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {sending ? 'Sending...' : 'Send'}
-            </button>
           </div>
-        </form>
+        ) : (
+          messages.map((message) => (
+            <div
+              key={message.id}
+              className={`flex ${message.senderId === (isDoctor ? doctorId : patientId) ? 'justify-end' : 'justify-start'}`}
+            >
+              <div
+                className={`max-w-[75%] rounded-lg p-2 relative group ${
+                  message.senderId === (isDoctor ? doctorId : patientId)
+                    ? 'bg-indigo-600 text-white'
+                    : 'bg-gray-100 text-gray-800'
+                }`}
+              >
+                <p className="break-words text-sm">{message.message}</p>
+                <p className={`text-[10px] mt-1 ${
+                  message.senderId === (isDoctor ? doctorId : patientId)
+                    ? 'text-indigo-200'
+                    : 'text-gray-500'
+                }`}>
+                  {formatTime(message.timestamp)}
+                </p>
+                {message.senderId === (isDoctor ? doctorId : patientId) && (
+                  <button
+                    onClick={() => deleteMessage(message.id)}
+                    className="absolute -right-5 top-0 p-1 text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+            </div>
+          ))
+        )}
+        <div ref={messagesEndRef} />
       </div>
+
+      {/* Message Input */}
+      <form onSubmit={sendMessage} className="p-2 border-t">
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={newMessage}
+            onChange={(e) => setNewMessage(e.target.value)}
+            placeholder="Type a message..."
+            className="flex-1 px-3 py-1.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+          />
+          <button
+            type="submit"
+            disabled={sending || !newMessage.trim()}
+            className={`px-3 py-1.5 bg-indigo-600 text-white rounded-lg ${
+              sending || !newMessage.trim()
+                ? 'opacity-50 cursor-not-allowed'
+                : 'hover:bg-indigo-700'
+            } transition-colors`}
+          >
+            {sending ? (
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+            ) : (
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+              </svg>
+            )}
+          </button>
+        </div>
+      </form>
     </div>
   );
 };

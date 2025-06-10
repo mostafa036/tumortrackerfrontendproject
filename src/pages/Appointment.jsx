@@ -189,8 +189,8 @@ const Appointment = () => {
 
   useEffect(() => {
     const fetchUserAppointment = async () => {
-    try {
-      const token = localStorage.getItem('token');
+      try {
+        const token = localStorage.getItem('token');
         // افترض أن هناك API يجلب موعد المريض الحالي
         const response = await axios.get(
           `https://tumortraker12.runasp.net/api/Appointment/GetPatientAppointment`,
@@ -201,11 +201,10 @@ const Appointment = () => {
         if (response.data) {
           setUserAppointment(response.data);
         }
-    } catch (err) {
+      } catch (err) {
         console.error('Error fetching user appointment:', err);
       }
     };
-    image.png
     fetchUserAppointment();
   }, []);
 

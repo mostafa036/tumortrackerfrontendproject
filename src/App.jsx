@@ -19,6 +19,11 @@ import ProtectedRoute from './components/ProtectedRoute'
 import DoctorSchedule from './pages/DoctorSchedule'
 import VideoCall from './components/VideoCall'
 import DoctorAppointments from './pages/DoctorAppointments'
+import ForYou from './pages/ForYou'
+import Diagnosis from './pages/Diagnosis'
+import SuccessStories from './pages/SuccessStories'
+import RiskFactors from './pages/RiskFactors'
+import HowToDeal from './pages/HowToDeal'
 
 const App = () => {
   const { user } = useAuth();
@@ -61,6 +66,31 @@ const App = () => {
         <Route path='/ai-tool' element={
           <ProtectedRoute allowedRoles={['Patient']}>
             <AiTool />
+          </ProtectedRoute>
+        } />
+        <Route path='/for-you' element={
+          <ProtectedRoute>
+            <ForYou />
+          </ProtectedRoute>
+        } />
+        <Route path='/diagnosis' element={
+          <ProtectedRoute>
+            <Diagnosis />
+          </ProtectedRoute>
+        } />
+        <Route path='/success-stories' element={
+          <ProtectedRoute>
+            <SuccessStories />
+          </ProtectedRoute>
+        } />
+        <Route path='/risk-factors' element={
+          <ProtectedRoute>
+            <RiskFactors />
+          </ProtectedRoute>
+        } />
+        <Route path='/how-to-deal' element={
+          <ProtectedRoute>
+            <HowToDeal />
           </ProtectedRoute>
         } />
         <Route path='/about' element={<About />} />

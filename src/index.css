@@ -2,6 +2,27 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Add custom colors */
+.bg-navy-900 {
+  background-color: #1B2B44;
+}
+
+.text-navy-900 {
+  color: #1B2B44;
+}
+
+/* Custom gradient background */
+.from-navy-900 {
+  --tw-gradient-from: #1B2B44;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgb(27, 43, 68, 0));
+}
+
+/* Add backdrop blur support */
+.backdrop-blur-sm {
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
 .active hr{
   @apply block 
 }
