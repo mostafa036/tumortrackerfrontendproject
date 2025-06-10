@@ -189,8 +189,8 @@ const Appointment = () => {
 
   useEffect(() => {
     const fetchUserAppointment = async () => {
-      try {
-        const token = localStorage.getItem('token');
+    try {
+      const token = localStorage.getItem('token');
         // افترض أن هناك API يجلب موعد المريض الحالي
         const response = await axios.get(
           `https://tumortraker12.runasp.net/api/Appointment/GetPatientAppointment`,
@@ -201,10 +201,11 @@ const Appointment = () => {
         if (response.data) {
           setUserAppointment(response.data);
         }
-      } catch (err) {
+    } catch (err) {
         console.error('Error fetching user appointment:', err);
       }
     };
+
     fetchUserAppointment();
   }, []);
 
@@ -456,7 +457,7 @@ const Appointment = () => {
 
   return (
     <div className="max-w-6xl mx-auto p-6">
-      {/* Doctor Info Card */}
+          {/* Doctor Info Card */}
       <div className="bg-white rounded-xl shadow-lg p-8 mb-8">
         <div className="flex gap-10">
           {/* Doctor Image */}
@@ -469,7 +470,7 @@ const Appointment = () => {
           </div>
           
           {/* Doctor Info */}
-          <div className="flex-1">
+              <div className="flex-1">
             <div className="flex items-center gap-3 mb-4">
               <h2 className="text-3xl font-bold text-gray-800">
                 Dr. {doctor?.firstName} {doctor?.lastName}
@@ -526,23 +527,21 @@ const Appointment = () => {
               </p>
             </div>
 
-            {/* Appointment Fee and Chat Button */}
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-3 bg-blue-50 p-4 rounded-xl">
-                <span className="text-xl font-semibold text-gray-800">Appointment Fee:</span>
-                <span className="text-2xl font-bold text-blue-600">${doctor?.appointmentFee || '50'}</span>
+            {/* Appointment Fee */}
+            <div className="flex items-center gap-3 bg-blue-50 p-4 rounded-xl inline-block">
+              <span className="text-xl font-semibold text-gray-800">Appointment Fee:</span>
+              <span className="text-2xl font-bold text-blue-600">${doctor?.appointmentFee || '50'}</span>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      </div>
 
-      {/* عرض موعد المريض الحالي إذا وجد */}
-      {userAppointment && (
-        <AppointmentDetails appointment={userAppointment} />
-      )}
+          {/* عرض موعد المريض الحالي إذا وجد */}
+          {userAppointment && (
+            <AppointmentDetails appointment={userAppointment} />
+          )}
 
-      {/* Appointments Section */}
+          {/* Appointments Section */}
       <div className="mt-8">
         <h3 className="text-xl font-semibold mb-4">Select Day</h3>
         <div className="grid grid-cols-7 gap-4 mb-8">
@@ -571,84 +570,81 @@ const Appointment = () => {
           })}
             </div>
 
-            {/* Time Slots - Now always visible */}
-            <div className="mt-8">
-              <h3 className="text-xl font-semibold mb-4">Available Time Slots</h3>
-              <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-3">
-                {generateTimeSlots().map((time) => {
-                  const isAvailable = selectedDay ? isTimeSlotAvailable(selectedDay, time) : false;
-                  const isBooked = selectedDay ? bookedAppointments.some(
-                    app => app.dayOfWeek === selectedDay.fullName && app.time === time
-                  ) : false;
-                  const isSelected = selectedTime === time;
-                  
-                  return (
-                    <button
-                      key={time}
-                      onClick={() => selectedDay && setSelectedTime(time)}
-                      className={`p-3 rounded-lg text-center ${
-                        isSelected
-                          ? 'bg-indigo-600 text-white'
-                          : !selectedDay
-                          ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                          : isAvailable
-                          ? 'bg-green-50 hover:bg-green-100 text-green-700'
-                          : isBooked
-                          ? 'bg-red-50 text-red-400 cursor-not-allowed'
-                          : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                      }`}
-                      disabled={!selectedDay || !isAvailable || isBooked}
-                    >
-                      {time}
-                      {isBooked && (
-                        <span className="block text-xs mt-1">Booked</span>
-                      )}
-                      {!selectedDay && (
-                        <span className="block text-xs mt-1">Select a day</span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Booking Button and Status */}
-              {selectedTime && (
-                <div className="mt-8">
+            {/* Time Slots */}
+        {selectedDay && (
+          <div className="mt-8">
+            <h3 className="text-xl font-semibold mb-4">Available Time Slots</h3>
+            <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-3">
+              {generateTimeSlots().map((time) => {
+                const isAvailable = isTimeSlotAvailable(selectedDay, time);
+                const isBooked = bookedAppointments.some(
+                  app => app.dayOfWeek === selectedDay.fullName && app.time === time
+                );
+                const isSelected = selectedTime === time;
+                
+                return (
                   <button
-                    onClick={bookAppointment}
-                    disabled={bookingStatus.loading}
-                    className={`px-6 py-3 rounded-lg text-white font-semibold ${
-                      bookingStatus.loading
-                        ? 'bg-gray-400 cursor-not-allowed'
-                        : 'bg-indigo-600 hover:bg-indigo-700'
+                    key={time}
+                    onClick={() => setSelectedTime(time)}
+                    className={`p-3 rounded-lg text-center ${
+                      isSelected
+                        ? 'bg-indigo-600 text-white'
+                        : isAvailable
+                        ? 'bg-green-50 hover:bg-green-100 text-green-700'
+                        : isBooked
+                        ? 'bg-red-50 text-red-400 cursor-not-allowed'
+                        : 'bg-gray-100 text-gray-400 cursor-not-allowed'
                     }`}
+                    disabled={!isAvailable || isBooked}
                   >
-                    {bookingStatus.loading ? 'جاري الحجز...' : 'تأكيد الحجز'}
+                    {time}
+                    {isBooked && (
+                      <span className="block text-xs mt-1">Booked</span>
+                    )}
                   </button>
-
-                  {bookingStatus.error && (
-                    <div className="mt-4 p-3 bg-red-50 text-red-600 rounded-lg">
-                      {bookingStatus.error}
-                    </div>
-                  )}
-
-                  {bookingStatus.success && (
-                    <div className="mt-4 p-3 bg-green-50 text-green-600 rounded-lg">
-                      تم حجز الموعد بنجاح!
-                    </div>
-                  )}
-
-                  <div className="mt-4 p-4 bg-blue-50 rounded-lg">
-                    <h4 className="font-semibold text-blue-800 mb-2">تفاصيل الحجز:</h4>
-                    <p className="text-blue-700">
-                      اليوم: {selectedDay.fullName}<br />
-                      الوقت: {selectedTime}<br />
-                      الدكتور: Dr. {doctor?.firstName} {doctor?.lastName}
-                    </p>
-                  </div>
-                </div>
-              )}
+                );
+              })}
             </div>
+
+            {/* Booking Button and Status */}
+            {selectedTime && (
+              <div className="mt-8">
+                <button
+                  onClick={bookAppointment}
+                  disabled={bookingStatus.loading}
+                  className={`px-6 py-3 rounded-lg text-white font-semibold ${
+                    bookingStatus.loading
+                      ? 'bg-gray-400 cursor-not-allowed'
+                      : 'bg-indigo-600 hover:bg-indigo-700'
+                  }`}
+                >
+                  {bookingStatus.loading ? 'جاري الحجز...' : 'تأكيد الحجز'}
+                </button>
+
+                {bookingStatus.error && (
+                  <div className="mt-4 p-3 bg-red-50 text-red-600 rounded-lg">
+                    {bookingStatus.error}
+                  </div>
+                )}
+
+                {bookingStatus.success && (
+                  <div className="mt-4 p-3 bg-green-50 text-green-600 rounded-lg">
+                    تم حجز الموعد بنجاح!
+                  </div>
+                )}
+
+                <div className="mt-4 p-4 bg-blue-50 rounded-lg">
+                  <h4 className="font-semibold text-blue-800 mb-2">تفاصيل الحجز:</h4>
+                  <p className="text-blue-700">
+                    اليوم: {selectedDay.fullName}<br />
+                    الوقت: {selectedTime}<br />
+                    الدكتور: Dr. {doctor?.firstName} {doctor?.lastName}
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+              )}
       </div>
 
             {/* Related Doctors */}
